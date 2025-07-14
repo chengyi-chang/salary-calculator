@@ -1,0 +1,139 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>每月薪資計算器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+        <h1 class="text-2xl font-bold mb-4 text-center">每月薪資計算器</h1>
+        
+        <!-- 輸入基本月薪 -->
+        <div class="mb-4">
+            <label for="baseSalary" class="block text-sm font-medium text-gray-700">基本月薪 (NT$)</label>
+            <input type="number" id="baseSalary" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="輸入基本月薪" required>
+        </div>
+
+        <!-- 增加/減少方案 -->
+        <div class="mb-4">
+            <label for="itemDescription" class="block text-sm font-medium text-gray-700">項目描述</label>
+            <input type="text" id="itemDescription" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="例如：加班費、請假扣款">
+            <label for="itemAmount" class="block text-sm font-medium text-gray-700 mt-2">金額 (NT$，正數為增加，負數為扣除)</label>
+            <input type="number" id="itemAmount" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="輸入金額">
+            <button onclick="addItem()" class="mt-2 w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">新增項目</button>
+        </div>
+
+        <!-- 顯示項目列表 -->
+        <div id="itemsList" class="mb-4">
+            <h2 class="text-lg font-semibold">薪資項目</h2>
+            <ul id="items" class="list-disc pl-5"></ul>
+        </div>
+
+        <!-- 顯示總薪資 -->
+        <div class="text-center">
+            <p class="text-lg font-semibold">總薪資: <span id="totalSalary">0</span> NT$</p>
+            <button onclick="resetCalculator()" class="mt-4 bg-red-500 text-white p-2 rounded-md hover:bg-red-600">重置</button>
+        </div>
+    </div>
+
+    <script>
+        let items = JSON.parse(localStorage.getItem('salaryItems')) || [];
+
+        // 計算總薪資
+        function calculateTotal() {
+            const baseSalary = parseFloat(document.getElementById('baseSalary').value) || 0;
+            const total = items.reduce((sum, item) => sum + item.amount, baseSalary);
+            document.getElementById('totalSalary').textContent = total.toFixed(2);
+        }
+
+        // 新增薪資項目
+        function addItem() {
+            const description = document.getElementById('itemDescription').value;
+            const amount = parseFloat(document.getElementById('itemAmount').value);
+            if (description && !isNaN(amount)) {
+                items.push({ description, amount });
+                localStorage.setItem('salaryItems', JSON.stringify(items));
+                renderItems();
+                document.getElementById('itemDescription').value = '';
+                document.getElementById('itemAmount').value = '';
+            } else {
+                alert('請輸入有效的項目描述和金額');
+            }
+        }
+
+        // 渲染項目列表
+        function renderItems() {
+            const itemsList = document.getElementById('items');
+            itemsList.innerHTML = '';
+            items.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center py-1';
+                li.innerHTML = `${item.description}: ${item.amount > 0 ? '+' : ''}${item.amount} NT$ 
+                    <button onclick="removeItem(${index})" class="text-red-500 hover:text-red-700">刪除</button>`;
+                itemsList.appendChild(li);
+            });
+            calculateTotal();
+        }
+
+        // 刪除項目
+        function removeItem(index) {
+            items.splice(index, 1);
+            localStorage.setItem('salaryItems', JSON.stringify(items));
+            renderItems();
+        }
+
+        // 重置計算器
+        function resetCalculator() {
+            items = [];
+            localStorage.setItem('salaryItems', JSON.stringify(items));
+            document.getElementById('baseSalary').value = '';
+            renderItems();
+        }
+
+        // 初始化
+        document.getElementById('baseSalary').addEventListener('input', calculateTotal);
+        renderItems();
+    </script>
+</body>
+</html>
